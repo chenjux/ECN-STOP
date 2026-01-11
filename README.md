@@ -1,4 +1,4 @@
-# FCCA-Pruning
+# From Traces to Trees: Structured On-Policy Pruning of Long-Form Reasoning in Reasoning Language  Models
 
 Official implementation of FCCA-Pruning:  
 Structured Chain-of-Thought Pruning for Efficient Reasoning in Large Language Models
@@ -19,62 +19,64 @@ FCCA-Pruning is a structured chain-of-thought pruning method that retains only t
 
 ## Repository Structure
 
+```
+Main
 .
-├── pruned_data_pipeline/       # Core FCCA pruning logic
-├── training/                   # Fine-tuning & self-distillation code
-├── eval/                       # EvalScope-based evaluation scripts
-├── data/                       # Data processing/generation scripts (no raw data)
-├── scripts/                    # Ready-to-run experiment scripts
-├── figs/                       # Figures for the paper
-├── outputs/                    # Experiment outputs (git ignore recommended)
+├── pruned_data_pipeline/ 
+│   ├── data/
+│   │   ├── batch_requests_taxonomy
+│   │   ├── batch_requests_conclusion
+│   │   └── prm12k.csv                #Raw data start from here
+│   ├──  prm12k_self_distill.ipynb    #FCCA  Step 1
+│   ├──  google_batch_api.ipynb       #FCCA  Step 2
+│   └──  prm12k_tree_pruning.ipynb    #FCCA  Step 3
+├── inference/                        #Inference for self-distill response generation and answer checking
+│   ├── inference.py                    
+│   └── best_of_N_inference.py
+├── training/
+│   ├── export_model.sh                 #Merge Adaptor
+│   ├── run.sh                          #Use this script to run. 
+│   └── train.sh                        #Training hyperparameters
+├── eval/
+│   └── auto_eval.py
+├── outputs/
+├── figs/
 └── README.md
-
+```
 ## Quick Start
 
 1. Environment Setup (Recommended)
 
+```
 conda create -n fcca python=3.10 -y
 conda activate fcca
-
 pip install modelscope "modelscope-swift[llm]" evalscope vllm transformers
+```
 
-
-2. Run FCCA Pruning (Example)
-
-python scripts/run_fcca_pruning.py \
-  --model qwen-7b \
-  --dataset math500 \
-  --max_length 4096 \
-  --output_dir outputs/fcca_qwen_math500_4096 \
-  --seed 42
-
+2. Train FCCA Pruning model
+```
+./train/run.sh
+```
 
 3. Evaluate the Pruned Model
-
-python eval/run_evalscope.py \
-  --model outputs/fcca_qwen_math500_4096 \
-  --datasets math500 gsm8k aime2024 \
-  --batch_size 32
-
+```
+python ./eval/auto_evalscope.py \
+```
 
 ## Main Experimental Settings
-
-Base Models: Qwen-7B, Qwen-14B
-Datasets: Math500, GSM8K, AIME 2024
-Context Lengths: 2048 / 4096 / 8192
-Random Seeds: 10 different seeds
-Decoding Strategy: top-p (default)
-
+```
+Base Models: DeepSeek-R1-Distill-Qwen-7B, DeepSeek-R1-Distill-llama-8B
+Datasets: PRM 12k (1000 selected)
+Training Lengths:  4096 / 8192
+Random Seeds: 1
+Decoding Strategy: top-p (0.95)
+```
 
 ## Evaluation Benchmarks
 
-Math500      - Main result table
-GSM8K        - Standard 8-shot CoT
-AIME 2024    - Extremely challenging competition problems, evaluation only
-
-Important: Due to licensing and policy constraints, we do not distribute self-distilled or pruned reasoning traces.
-However, you can regenerate them using scripts in pruned_data_pipeline.
-
+Math500       
+GSM8K         
+AIME 2024     
 
 ## Citation
 
@@ -88,9 +90,7 @@ However, you can regenerate them using scripts in pruned_data_pipeline.
 
 ## Notes & Known Limitations
 
-- Currently tested primarily on Qwen series; support for other models coming soon
 - Long contexts (≥8192) require high GPU memory
 - Pruning effectiveness varies by model size and task
-- AIME 2024 is extremely difficult—even strong models have low accuracy
 
 Happy experimenting!
