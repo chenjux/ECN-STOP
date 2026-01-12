@@ -54,56 +54,25 @@ run_task() {
     echo "$TASK_NAME finished at $(date)" | tee -a "$PIPELINE_LOG" "$TASK_LOG"
 }
 
-
-# 定义任务（10 个）
-
-
-TASK_NAMES=(
-    # "FCCA_4096"
-    "FCCA_Self_distill_4096"
-    # "FCCA_8192"
-    # "FCCA_Self_distill_8192"
-    # "full_cot_4096"
-    # "full_cot_Self_distill_4096"
-    # "full_cot_8192"
-    # "full_cot_Self_distill_8192"
-    # "no_thinking_8192"
-    # "random_pruned_8192"
-)
-
 DATASETS=(
-    # "$DATASET_DIR/fcca.jsonl"
     "$DATASET_DIR/fcca_self_distill_qwen.jsonl"
-    # "$DATASET_DIR/fcca.jsonl"
-    # "$DATASET_DIR/fcca_self_distill_qwen.jsonl"
-    # "$DATASET_DIR/full_cot.jsonl"
-    # "$DATASET_DIR/full_cot_self_distill_qwen.jsonl"
-    # "$DATASET_DIR/full_cot.jsonl"
-    # "$DATASET_DIR/full_cot_self_distill_qwen.jsonl"
-    # "$DATASET_DIR/no_thinking.jsonl"
-    # "$DATASET_DIR/random_pruned.jsonl"
 )
 
 MAX_LENGTHS=(
-# "4096"
-# "4096"
 "8192"
-# "8192"
-# "4096"
-# "4096"
-# "8192"
-# "8192"
-# "8192"
-# "8192"
 )
 
 SEEDS=("1")   # can add multiple seeds like ("1" "2" "3")
 
 
 
-for i in ${!TASK_NAMES[@]}; do
+for i in ${!DATASETS[@]}; do
     for seed in ${SEEDS[@]}; do
-        run_task "$seed" "${MAX_LENGTHS[i]}" "${DATASETS[i]}" "${TASK_NAMES[i]}"
+        DATASET="${DATASETS[i]}"
+        MAX_LENGTH="${MAX_LENGTHS[i]}"
+        DATASET_NAME=$(basename "$DATASET" .jsonl)
+        TASK_NAME="${DATASET_NAME}_${MAX_LENGTH}_${seed}_${MODEL}"
+        run_task "$seed" "$MAX_LENGTH" "$DATASET" "$TASK_NAME"
     done
 done
 

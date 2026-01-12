@@ -60,7 +60,7 @@ pip install modelscope "modelscope-swift[llm]" evalscope vllm transformers
 
 3. Evaluate the Pruned Model
 ```
-python ./eval/auto_evalscope.py \
+python ./eval/auto_evalscope.py
 ```
 
 ## Main Experimental Settings
