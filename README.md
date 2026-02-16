@@ -20,7 +20,6 @@ Structured Chain-of-Thought Pruning for Efficient Reasoning in Large Language Mo
 ---
 
 # 🎉News
-- **[2026/01/20]** FCCA paper available on [arXiv](link). 
 
 
 # 📖Introduction
@@ -108,13 +107,6 @@ FCCA builds upon [swift](https://github.com/modelscope/ms-swift) and utilizes [v
 
 
 ## Citation
-
-@article{xu2026fcca,
-  title     = {FCCA-Pruning: Structured Chain-of-Thought Pruning for Efficient Reasoning in Large Language Models},
-  author    = {Xu, Chenjun and ...},
-  journal   = {arXiv preprint arXiv:XXXX.XXXXX},
-  year      = {2026}
-}
 
 
 Happy experimenting!
