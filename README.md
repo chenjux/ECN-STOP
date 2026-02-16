@@ -3,9 +3,6 @@
 Official implementation of FCCA-Pruning:  
 Structured Chain-of-Thought Pruning for Efficient Reasoning in Large Language Models
 
-Paper: https://arxiv.org/abs/XXXX.XXXXX  
-ACL 2026 (under review)
-
 
 ---
 
