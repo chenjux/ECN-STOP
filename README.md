@@ -14,7 +14,7 @@ Official implementation of STOP.
 
 ## News
 
-- COLM 2026 naming update: older drafts used `FCCA`; the current paper names the framework `STOP` and the pruning rule `ECN` (`Earliest Correct Node`).
+- COLM 2026 
 
 ## Introduction
 
