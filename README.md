@@ -1,112 +1,116 @@
-# From Traces to Trees: Structured On-Policy Pruning of Long-Form Reasoning in Reasoning Language  Models
+# STOP: Structured On-Policy Pruning of Long-Form Reasoning in Low-Data Regimes
 
-Official implementation of FCCA-Pruning:  
-Structured Chain-of-Thought Pruning for Efficient Reasoning in Large Language Models
+Official implementation of STOP.
 
+## Overview
 
----
+- [News](#news)
+- [Introduction](#introduction)
+- [Getting Started](#getting-started)
+- [Usage](#usage)
+- [Evaluation](#evaluation)
+- [Acknowledgement](#acknowledgement)
+- [Citation](#citation)
 
-# 📚 Overview
-- 🎉 [News](#news)  
-- 📖 [Introduction](#introduction)  
-- ✨ [Getting Started](#getting-started)  
-- 🔧 [Usage(Core)](#usage)  
-- 📃 [Evaluation](#evaluation)  
-- 🎈 [Citation](#citation)  
-- 🌻 [Acknowledgement](#acknowledgement)  
-<!-- - 📈 [Star History](#star-history) -->
+## News
 
+- COLM 2026 naming update: older drafts used `FCCA`; the current paper names the framework `STOP` and the pruning rule `ECN` (`Earliest Correct Node`).
 
----
+## Introduction
 
-# 🎉News
+STOP is an on-policy framework for pruning long-form reasoning traces in low-data regimes. It combines:
 
+- self-distilled trace construction from the student model,
+- a structured reasoning interface built with node segmentation, taxonomy annotation, and reasoning-tree construction,
+- ECN pruning, which keeps the minimal prefix up to the earliest correct answering conclusion while preserving semantic continuity.
 
-# 📖Introduction
+Across DeepSeek-R1-Distill-Qwen-7B and DeepSeek-R1-Distill-LLaMA-3-8B on GSM8K, Math 500, and AIME 2024, the paper reports 19.4% to 42.4% token reduction while largely preserving accuracy.
 
-FCCA-Pruning is a structured chain-of-thought pruning method that retains only the minimal prefix up to the first correct conclusion, removing all redundant post-solution reasoning steps. This significantly reduces inference costs, mitigates overthinking behavior, and preserves semantic coherence and task performance.
-
-![overview](./figures/teachvsself.png)
+![STOP overview](./figures/stop_pipeline.png)
 
 ## Key Features
 
-- Minimal prefix structured pruning (FCCA)
-- Built on ModelScope + Swift ecosystem
-- Standardized evaluation with EvalScope
-- Reproducible pruning and evaluation pipelines
+- STOP framework for structured on-policy pruning
+- ECN node-level pruning on top of a structured reasoning interface
+- On-policy self-distilled supervision for low-data fine-tuning
+- Reproducible training and evaluation based on Swift, vLLM, and EvalScope
 
 ## Repository Structure
 
-```
-Main
+```text
 .
-├── pruned_data_pipeline/ 
+├── pruned_data_pipeline/
 │   ├── data/
-│   │   ├── batch_requests_taxonomy
-│   │   ├── batch_requests_conclusion
-│   │   └── prm12k.csv                #Raw data start from here
-│   ├──  prm12k_self_distill.ipynb    #FCCA  Step 1
-│   ├──  google_batch_api.ipynb       #FCCA  Step 2
-│   └──  prm12k_tree_pruning.ipynb    #FCCA  Step 3
-├── inference/                        #Inference for self-distill response generation and answer checking
-│   ├── inference.py                    
-│   └── best_of_N_inference.py
-├── training/
-│   ├── export_model.sh                 #Merge Adaptor
-│   ├── run.sh                          #Use this script to run. 
-│   └── train.sh                        #Training hyperparameters
+│   │   └── prm12k.csv
+│   ├── prm12k_self_distill.ipynb      # STOP stage 1: self-distilled trace construction
+│   ├── google_batch_api.ipynb         # Annotation / batch API utilities
+│   ├── prm12k_tree_pruning.ipynb      # STOP stage 2-3: structured interface + ECN pruning
+│   ├── best_of_N_inference.sh         # Best-of-K sampling for trace generation
+│   └── inference.sh                   # Single-run inference / checking
+├── train/
+│   ├── run.sh
+│   └── train.sh
 ├── eval/
-│   └── auto_eval.py
-├── outputs/
-├── figs/
+│   ├── auto_eval.py
+│   └── report.py
+├── figures/
 └── README.md
 ```
-# ✨Getting Started
 
-1. Environment Setup (Recommended)
+## Getting Started
 
-```
-conda create -n fcca python=3.10 -y
-conda activate fcca
+1. Environment setup
+
+```bash
+conda create -n stop python=3.10 -y
+conda activate stop
 pip install modelscope "modelscope-swift[llm]" evalscope vllm transformers
 ```
 
-2. Use Our On Policy FCCA PRM 12k data to train FCCA model
-```
+2. Train with STOP / ECN-constructed data
+
+```bash
 ./train/run.sh
 ```
 
-3. Evaluate the Pruned Model
-```
-python ./eval/auto_evalscope.py
+The default training entry expects `./data/ecn_self_distill_qwen.jsonl`.
+
+3. Evaluate the pruned model
+
+```bash
+python ./eval/auto_eval.py
 ```
 
 ## Main Experimental Settings
-```
-Base Models: DeepSeek-R1-Distill-Qwen-7B, DeepSeek-R1-Distill-llama-8B
-Datasets: PRM 12k (1000 selected)
-Training Lengths:  4096 / 8192
+
+```text
+Base Models: DeepSeek-R1-Distill-Qwen-7B, DeepSeek-R1-Distill-LLaMA-3-8B
+Datasets: PRM 12k (1000 selected samples)
+Training Lengths: 4096 / 8192
 Random Seeds: 1
-Decoding Strategy: top-p (0.95)
+Best-of-K: 4
+Decoding Strategy: top-p (0.95), temperature 0.7
 ```
 
-## Evaluation Benchmarks
+## Evaluation
 
-```Math500,      GSM8K,         AIME 2024```
+Benchmarks:
 
-# 🔧Usage(Core)
-First, we use ```prm12k_self_distill.ipynb``` to generate four self-distilled datasets. From these, we select responses with medium-length reasoning and correct answers to construct a best-seed dataset. This step requires GPU-based inference, for which we provide the script ```best_of_N_inference.sh``` and```inference.sh```.
+```text
+Math500, GSM8K, AIME 2024
+```
 
-Next, the resulting dataset is fed into ```prm12k_tree_pruning.ipynb``` to perform FCCA pruning. During this process, google_batch_api.ipynb is used twice for batch inference. The detailed execution steps and intermediate handling are documented within ```prm12k_tree_pruning.ipynb``` and should be followed accordingly.
-![Usage(Core)](./figures/fcca_data_pipeline.png)
+## Usage
 
+1. Use `prm12k_self_distill.ipynb` together with `best_of_N_inference.sh` and `inference.sh` to generate self-distilled traces and keep successful candidates.
+2. Use `google_batch_api.ipynb` and `prm12k_tree_pruning.ipynb` to build the STOP structured reasoning interface, identify the ECN for each trace, and prune each trace to its minimal correct prefix.
+3. Fine-tune the student model on the resulting ECN-pruned supervision targets with `./train/run.sh`.
+4. Run `python ./eval/auto_eval.py` for benchmark evaluation.
 
-# 🌻Acknowledgement
+## Acknowledgement
 
-FCCA builds upon [swift](https://github.com/modelscope/ms-swift) and utilizes [vLLM](https://github.com/vllm-project/vllm) for inference. We utilize [evalscope](https://github.com/modelscope/evalscope) for evaluation. We thank the open-source community for datasets and backbones, including [PRM 12k](https://huggingface.co/datasets/horseee/MixChain-Z-PRM12K) and [DeepSeek-R1](https://github.com/deepseek-ai/deepseek-r1) model series. 
-
+STOP builds upon [swift](https://github.com/modelscope/ms-swift) and uses [vLLM](https://github.com/vllm-project/vllm) for inference. We use [EvalScope](https://github.com/modelscope/evalscope) for evaluation. We thank the open-source community for datasets and backbones, including [PRM 12k](https://huggingface.co/datasets/horseee/MixChain-Z-PRM12K) and the [DeepSeek-R1](https://github.com/deepseek-ai/deepseek-r1) model series.
 
 ## Citation
 
-
-Happy experimenting!
+Citation information will be updated after the paper release.

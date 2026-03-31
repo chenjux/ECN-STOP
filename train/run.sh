@@ -55,7 +55,7 @@ run_task() {
 }
 
 DATASETS=(
-    "$DATASET_DIR/fcca_self_distill_qwen.jsonl"
+    "$DATASET_DIR/ecn_self_distill_qwen.jsonl"
 )
 
 MAX_LENGTHS=(

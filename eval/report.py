@@ -22,6 +22,17 @@ def token_calculator(paragraphs):
 # Token computation
 # =========================================================
 
+#!/usr/bin/env python3
+import os
+import json
+from pathlib import Path
+import pandas as pd
+
+
+# =========================================================
+# Token computation from jsonl
+# =========================================================
+
 def compute_avg_tokens_from_jsonl(jsonl_files, token_calculator):
     all_tokens = []
 
@@ -45,14 +56,14 @@ def compute_avg_tokens_from_jsonl(jsonl_files, token_calculator):
 
 
 # =========================================================
-# Detect dataset + files
+# Detect dataset + prediction files
 # =========================================================
 
 def detect_dataset_and_files(model_pred_dir):
     files = list(model_pred_dir.glob("*.jsonl"))
     names = [f.name for f in files]
 
-    # math_500 (5 levels)
+    # math_500: 5 levels
     math_files = sorted([f for f in files if f.name.startswith("math_500_Level")])
     if math_files:
         return "math_500", math_files
@@ -69,26 +80,71 @@ def detect_dataset_and_files(model_pred_dir):
 
 
 # =========================================================
-# Process ONE run
+# Extract accuracy from reports
+# =========================================================
+
+def extract_accuracy_from_reports(run_dir):
+    """
+    reports/
+      └── <model_dir>/
+          └── *.json
+    """
+    reports_root = run_dir / "reports"
+    if not reports_root.exists():
+        return None, None, None
+
+    model_dirs = [d for d in reports_root.iterdir() if d.is_dir()]
+    if len(model_dirs) != 1:
+        print(f"[WARN] {run_dir.name}: expected 1 reports model dir, found {len(model_dirs)}")
+        return None, None, None
+
+    model_dir = model_dirs[0]
+    report_files = list(model_dir.glob("*.json"))
+    if not report_files:
+        return None, None, None
+
+    report_path = report_files[0]
+    try:
+        data = json.loads(report_path.read_text())
+    except Exception as e:
+        print(f"[WARN] Failed to read {report_path}: {e}")
+        return None, None, None
+
+    model_name = data.get("model_name", model_dir.name)
+    dataset_name = data.get("dataset_name")
+    accuracy = data.get("score")
+
+    return model_name, dataset_name, accuracy
+
+
+# =========================================================
+# Process ONE run (1 model)
 # =========================================================
 
 def process_single_run(run_dir, token_calculator):
     run_dir = Path(run_dir)
-    predictions_root = run_dir / "predictions"
 
+    # ---------- accuracy ----------
+    model_name_r, dataset_r, accuracy = extract_accuracy_from_reports(run_dir)
+    if accuracy is None:
+        print(f"[WARN] Missing accuracy in {run_dir.name}")
+        return None
+
+    # ---------- predictions ----------
+    predictions_root = run_dir / "predictions"
     if not predictions_root.exists():
         return None
 
     model_dirs = [d for d in predictions_root.iterdir() if d.is_dir()]
     if len(model_dirs) != 1:
-        print(f"[WARN] {run_dir.name}: expected 1 model dir, found {len(model_dirs)}")
+        print(f"[WARN] {run_dir.name}: expected 1 predictions model dir, found {len(model_dirs)}")
         return None
 
-    model_dir = model_dirs[0]
+    model_pred_dir = model_dirs[0]
 
-    dataset, jsonl_files = detect_dataset_and_files(model_dir)
+    dataset_p, jsonl_files = detect_dataset_and_files(model_pred_dir)
     if not jsonl_files:
-        print(f"[WARN] No known dataset files in {model_dir}")
+        print(f"[WARN] No prediction files in {model_pred_dir}")
         return None
 
     avg_tokens = compute_avg_tokens_from_jsonl(
@@ -98,14 +154,15 @@ def process_single_run(run_dir, token_calculator):
 
     return {
         "run_id": run_dir.name,
-        "model_name": model_dir.name,
-        "dataset": dataset,
+        "model_name": model_name_r or model_pred_dir.name,
+        "dataset": dataset_p or dataset_r,
+        "accuracy": accuracy,
         "avg_token_length": avg_tokens,
     }
 
 
 # =========================================================
-# Process ALL runs
+# Process ALL runs under outputs_qwen
 # =========================================================
 
 def process_all_runs(outputs_root, token_calculator):
@@ -123,6 +180,7 @@ def process_all_runs(outputs_root, token_calculator):
     return pd.DataFrame(rows)
 
 
+
 # =========================================================
 # Example usage
 # =========================================================
@@ -130,8 +188,7 @@ def process_all_runs(outputs_root, token_calculator):
 if __name__ == "__main__":
 
 
-    outputs_root = "/Users/dexter/Desktop/acl_data/outputs_qwen"
+    outputs_root = "/Users/dexter/Desktop/acl_data/tokenskip"
 
     df = process_all_runs(outputs_root, token_calculator)
     print(df)
-    
