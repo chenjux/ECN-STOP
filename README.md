@@ -84,12 +84,23 @@ python ./eval/auto_eval.py
 ## Main Experimental Settings
 
 ```text
-Base Models: DeepSeek-R1-Distill-Qwen-7B, DeepSeek-R1-Distill-LLaMA-3-8B
-Datasets: PRM 12k (1000 selected samples)
-Training Lengths: 4096 / 8192
-Random Seeds: 1
-Best-of-K: 4
-Decoding Strategy: top-p (0.95), temperature 0.7
+Base model: DeepSeek-R1-Distill-Qwen-7B
+Training dataset: ./data/ecn_self_distill_qwen.jsonl
+Train type: LoRA
+Torch dtype: bfloat16
+Maximum training length: 8192
+Random seed: 1
+Per-device train / eval batch size: 1 / 1
+Gradient accumulation steps: 16
+Learning rate: 1e-4
+LoRA rank / alpha: 8 / 32
+Target modules: all-linear
+Warmup ratio: 0.05
+Training epochs: 6
+Eval / save / logging steps: 100 / 100 / 5
+Save total limit: 2
+Dataloader workers: 4
+Default GPU: CUDA_VISIBLE_DEVICES=0
 ```
 
 ## Evaluation
