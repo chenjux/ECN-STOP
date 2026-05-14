@@ -1,79 +1,112 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-MODEL="deepseek-ai/DeepSeek-R1-Distill-Qwen-7B" #change base model here
-DATASET_DIR="./data" #change data dir here
-OUTPUT_BASE_DIR="./train/model"
-LOG_DIR="./train/log"
-mkdir -p "$LOG_DIR"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+source "$ROOT_DIR/scripts/common.sh"
 
-# main log
+MODEL="${MODEL:-deepseek-ai/DeepSeek-R1-Distill-Qwen-7B}"
+DATASET_DIR="${DATASET_DIR:-$ROOT_DIR/data}"
+OUTPUT_BASE_DIR="${OUTPUT_BASE_DIR:-$SCRIPT_DIR/model}"
+LOG_DIR="${LOG_DIR:-$SCRIPT_DIR/log}"
+EXPORT_SCRIPT="${EXPORT_SCRIPT:-$SCRIPT_DIR/export_model.sh}"
+DATASET_LIST_CSV="${DATASETS:-$DATASET_DIR/ecn_self_distill_qwen.jsonl}"
+MAX_LENGTH_LIST_CSV="${MAX_LENGTHS:-8192}"
+SEED_LIST_CSV="${SEEDS:-1}"
+
+ensure_dir "$LOG_DIR"
+ensure_dir "$OUTPUT_BASE_DIR"
+
 PIPELINE_LOG="$LOG_DIR/pipeline_log_$(date +%Y_%m%d_%H%M%S).log"
 
-echo "Starting pipeline: $(date)" | tee -a "$PIPELINE_LOG"
-
-run_task() {
-    local SEED=$1
-    local MAX_LENGTH=$2
-    local DATASET=$3
-    local TASK_NAME=$4
-
-    TIMESTAMP=$(date +%Y_%m%d_%H%M%S)
-    OUTPUT_DIR="$OUTPUT_BASE_DIR/${TASK_NAME}_seed${SEED}_$TIMESTAMP"
-    mkdir -p "$OUTPUT_DIR"
-
-    TASK_LOG="$LOG_DIR/${TASK_NAME}_seed${SEED}_$TIMESTAMP.log"
-
-    echo "Starting $TASK_NAME (seed $SEED) at $(date)" | tee -a "$PIPELINE_LOG" "$TASK_LOG"
-
-    # 训练（前台执行，阻塞）
-    bash ./train.sh "$DATASET" "$MODEL" "$OUTPUT_DIR" "$SEED" "$MAX_LENGTH" \
-        >> "$TASK_LOG" 2>&1
-
-    if [ $? -ne 0 ]; then
-        echo "ERROR: Training failed for $TASK_NAME" | tee -a "$PIPELINE_LOG" "$TASK_LOG"
-        exit 1
-    fi
-
-    echo "Training finished for $TASK_NAME at $(date)" | tee -a "$PIPELINE_LOG" "$TASK_LOG"
-
-    # 找 checkpoint
-    CHECKPOINT=$(find "$OUTPUT_DIR" -type d -name "checkpoint-*" | sort -V | tail -n 1)
-    if [ -z "$CHECKPOINT" ]; then
-        echo "ERROR: No checkpoint found for $TASK_NAME" | tee -a "$PIPELINE_LOG" "$TASK_LOG"
-        exit 1
-    fi
-
-    # 导出（前台执行，阻塞）
-    bash ./export_model.sh "$CHECKPOINT" >> "$TASK_LOG" 2>&1
-
-    if [ $? -ne 0 ]; then
-        echo "ERROR: Export failed for $TASK_NAME" | tee -a "$PIPELINE_LOG" "$TASK_LOG"
-        exit 1
-    fi
-
-    echo "$TASK_NAME finished at $(date)" | tee -a "$PIPELINE_LOG" "$TASK_LOG"
+log() {
+    local message="$1"
+    shift || true
+    echo "$message" | tee -a "$PIPELINE_LOG" "$@"
 }
 
-DATASETS=(
-    "$DATASET_DIR/ecn_self_distill_qwen.jsonl"
-)
+latest_checkpoint() {
+    local output_dir="$1"
+    local checkpoint=""
+    local latest_step=-1
 
-MAX_LENGTHS=(
-"8192"
-)
+    while IFS= read -r candidate; do
+        local name step
+        name="$(basename "$candidate")"
+        step="${name#checkpoint-}"
 
-SEEDS=("1")   # can add multiple seeds like ("1" "2" "3")
+        if [[ "$step" =~ ^[0-9]+$ ]] && (( step > latest_step )); then
+            latest_step="$step"
+            checkpoint="$candidate"
+        fi
+    done < <(find "$output_dir" -type d -name "checkpoint-*" 2>/dev/null)
 
+    printf '%s\n' "$checkpoint"
+}
 
+run_task() {
+    local seed="$1"
+    local max_length="$2"
+    local dataset="$3"
+    local task_name="$4"
 
-for i in ${!DATASETS[@]}; do
-    for seed in ${SEEDS[@]}; do
-        DATASET="${DATASETS[i]}"
-        MAX_LENGTH="${MAX_LENGTHS[i]}"
-        DATASET_NAME=$(basename "$DATASET" .jsonl)
-        TASK_NAME="${DATASET_NAME}_${MAX_LENGTH}_${seed}_${MODEL}"
-        run_task "$seed" "$MAX_LENGTH" "$DATASET" "$TASK_NAME"
+    local timestamp output_dir task_log checkpoint
+    timestamp="$(date +%Y_%m%d_%H%M%S)"
+    output_dir="$OUTPUT_BASE_DIR/${task_name}_$timestamp"
+    task_log="$LOG_DIR/${task_name}_$timestamp.log"
+
+    require_file "$dataset"
+    ensure_dir "$output_dir"
+
+    log "Starting $task_name (seed $seed) at $(date)" "$task_log"
+
+    if ! bash "$SCRIPT_DIR/train.sh" "$dataset" "$MODEL" "$output_dir" "$seed" "$max_length" \
+        >>"$task_log" 2>&1; then
+        log "ERROR: Training failed for $task_name" "$task_log"
+        exit 1
+    fi
+
+    log "Training finished for $task_name at $(date)" "$task_log"
+
+    checkpoint="$(latest_checkpoint "$output_dir")"
+    if [[ -z "$checkpoint" ]]; then
+        log "ERROR: No checkpoint found for $task_name" "$task_log"
+        exit 1
+    fi
+
+    if [[ -f "$EXPORT_SCRIPT" ]]; then
+        if ! bash "$EXPORT_SCRIPT" "$checkpoint" >>"$task_log" 2>&1; then
+            log "ERROR: Export failed for $task_name" "$task_log"
+            exit 1
+        fi
+    else
+        log "WARNING: Export script not found, skipping export: $EXPORT_SCRIPT" "$task_log"
+    fi
+
+    log "$task_name finished at $(date)" "$task_log"
+}
+
+IFS=',' read -r -a DATASET_LIST <<<"$DATASET_LIST_CSV"
+IFS=',' read -r -a MAX_LENGTH_LIST <<<"$MAX_LENGTH_LIST_CSV"
+IFS=',' read -r -a SEED_LIST <<<"$SEED_LIST_CSV"
+
+if [[ "${#DATASET_LIST[@]}" -ne "${#MAX_LENGTH_LIST[@]}" ]]; then
+    die "DATASETS and MAX_LENGTHS must have the same number of comma-separated items."
+fi
+
+MODEL_LABEL="$(safe_name "$(basename "$MODEL")")"
+
+log "Starting pipeline: $(date)"
+
+for i in "${!DATASET_LIST[@]}"; do
+    for seed in "${SEED_LIST[@]}"; do
+        dataset="${DATASET_LIST[$i]}"
+        max_length="${MAX_LENGTH_LIST[$i]}"
+        dataset_name="$(basename "$dataset" .jsonl)"
+        task_name="${dataset_name}_${max_length}_seed${seed}_${MODEL_LABEL}"
+
+        run_task "$seed" "$max_length" "$dataset" "$task_name"
     done
 done
 
-echo "All tasks completed: $(date)" | tee -a "$PIPELINE_LOG"
+log "All tasks completed: $(date)"

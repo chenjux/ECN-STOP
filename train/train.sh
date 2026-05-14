@@ -1,45 +1,49 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-# Check if required arguments are provided
-if [ $# -ne 5 ]; then
+if [[ $# -ne 5 ]]; then
     echo "Usage: $0 <dataset_path> <model> <output_dir> <seed> <max_length>"
     exit 1
 fi
 
-# Assign arguments to variables
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+source "$ROOT_DIR/scripts/common.sh"
+
+LOG_DIR="${LOG_DIR:-$SCRIPT_DIR/log}"
+ensure_dir "$LOG_DIR"
+
 DATASET_PATH="$1"
 MODEL="$2"
 OUTPUT_DIR="$3"
 SEED="$4"
 MAX_LENGTH="$5"
 
-LOGFILE="./train/log/training_log_$(date +%Y%m%d_%H%M%S).log"
-PIDFILE="training_${OUTPUT_DIR//\//_}.pid"
+: "${CUDA_VISIBLE_DEVICES:=0}"
+export CUDA_VISIBLE_DEVICES
 
-# Log basic information
+LOGFILE="$LOG_DIR/training_log_$(date +%Y%m%d_%H%M%S).log"
+PIDFILE="$LOG_DIR/training_$(basename "$OUTPUT_DIR")_$$.pid"
+
+cleanup() {
+    rm -f "$PIDFILE"
+}
+trap cleanup EXIT
+
 echo "Starting training: $(date)"
-echo "CUDA_VISIBLE_DEVICES=0"
+echo "CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"
 echo "Dataset: $DATASET_PATH"
 echo "Model: $MODEL"
 echo "Output directory: $OUTPUT_DIR"
 echo "Log file: $LOGFILE"
 echo "==============================="
 
-# Check if swift command is available
-if ! command -v swift &> /dev/null
-then
-    echo "ERROR: swift command not found. Please make sure it is installed and in PATH."
-    exit 1
-fi
+require_file "$DATASET_PATH"
+SWIFT_BIN="$(require_modelscope_swift)"
 
-# Check if dataset exists
-if [ ! -f "$DATASET_PATH" ]; then
-    echo "ERROR: Dataset file not found: $DATASET_PATH"
-    exit 1
-fi
+ensure_dir "$OUTPUT_DIR"
 
-# Start training in background but save PID
-CUDA_VISIBLE_DEVICES=0 swift sft \
+"$SWIFT_BIN" sft \
     --model "$MODEL" \
     --train_type lora \
     --dataset "$DATASET_PATH" \
@@ -56,34 +60,30 @@ CUDA_VISIBLE_DEVICES=0 swift sft \
     --save_total_limit 2 \
     --logging_steps 5 \
     --max_length "$MAX_LENGTH" \
-    --num_train_epochs 6\
+    --num_train_epochs 6 \
     --output_dir "$OUTPUT_DIR" \
     --warmup_ratio 0.05 \
     --dataloader_num_workers 4 \
     --seed "$SEED" \
     --model_name "$(basename "$MODEL")-finetune" \
-> "$LOGFILE" 2>&1 &
+    >"$LOGFILE" 2>&1 &
 
-# Save the PID
 TRAIN_PID=$!
-echo $TRAIN_PID > "$PIDFILE"
+echo "$TRAIN_PID" >"$PIDFILE"
 
 echo "Training started in background with PID: $TRAIN_PID"
 echo "Log file: $LOGFILE"
 echo "Waiting for training to complete..."
 
-# Wait for the process to finish
-wait $TRAIN_PID
+set +e
+wait "$TRAIN_PID"
 TRAIN_EXIT_CODE=$?
+set -e
 
-# Clean up PID file
-rm -f "$PIDFILE"
-
-if [ $TRAIN_EXIT_CODE -ne 0 ]; then
+if [[ $TRAIN_EXIT_CODE -ne 0 ]]; then
     echo "ERROR: Training failed with exit code $TRAIN_EXIT_CODE"
     echo "Check log file: $LOGFILE"
-    exit $TRAIN_EXIT_CODE
+    exit "$TRAIN_EXIT_CODE"
 fi
 
 echo "Training completed successfully: $(date)"
-exit 0
