@@ -1,120 +1,109 @@
 #!/usr/bin/env bash
-# ============================================================
-# Best-of-N Inference Script (Runs multiple rounds with different seeds)
-# ============================================================
+set -u -o pipefail
 
-# Default values (can be overridden via command-line arguments)
-MODEL_ID=""                  # Model ID (ModelScope/HF) or local path
-DATASET_FILE=""              # Path to the dataset .jsonl file
-OUTPUT_DIR="./best_of_n_results"  # Default output directory
-SEEDS=(1 2 3 4)                 # Default seeds for Best-of-N (can be customized)
-N=${#SEEDS[@]}               # Automatically compute N from seed list
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+source "$ROOT_DIR/scripts/common.sh"
 
-# Fixed inference parameters
+MODEL_ID=""
+DATASET_FILE=""
+OUTPUT_DIR="./best_of_n_results"
+SEEDS=(1 2 3 4)
+
 BACKEND="vllm"
-TEMPERATURE=0.7              # Keep 0.7 for diversity
+TEMPERATURE=0.7
 REPETITION_PENALTY=1
 TOP_P=1
-MAX_NEW_TOKENS=8192          # Important: prevent truncation
-TIMEOUT_HOURS=4              # Increased timeout for safety
+MAX_NEW_TOKENS=8192
+TIMEOUT_HOURS=4
 
-CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
+: "${CUDA_VISIBLE_DEVICES:=0}"
 export CUDA_VISIBLE_DEVICES
 
-# ==================== Parse command-line arguments ====================
 usage() {
+    local exit_code="${1:-1}"
+
     echo "Usage: $0 -m <model_id_or_path> -d <dataset_file> [-o <output_dir>] [-s <seed1,seed2,...>] [-h]"
-    echo ""
-    echo "  -m  Model ID (e.g., 'deepseek-ai/DeepSeek-R1-Distill-Llama-8B') or local path (required)"
-    echo "  -d  Dataset JSONL file path (required)"
-    echo "  -o  Output directory (optional, default: ./best_of_n_results)"
-    echo "  -s  Comma-separated list of seeds (optional, default: 2,3,4)"
-    echo "  -h  Show this help message"
-    echo ""
-    echo "Example:"
-    echo "  $0 -m \"deepseek-ai/DeepSeek-R1-Distill-Llama-8B\" -d \"data/self_distill.jsonl\" -o \"./results/llama\" -s 1,2,3,4"
-    exit 1
+    echo "  -m  Model ID or local path. Required."
+    echo "  -d  Dataset JSONL file. Required."
+    echo "  -o  Output directory. Default: ./best_of_n_results"
+    echo "  -s  Comma-separated seeds. Default: 1,2,3,4"
+    echo "  -h  Show this help message."
+    exit "$exit_code"
 }
 
-# Parse options
 while getopts "m:d:o:s:h" opt; do
-    case $opt in
+    case "$opt" in
         m) MODEL_ID="$OPTARG" ;;
         d) DATASET_FILE="$OPTARG" ;;
         o) OUTPUT_DIR="$OPTARG" ;;
-        s) IFS=',' read -ra SEEDS <<< "$OPTARG" ;;
-        h) usage ;;
-        ?) usage ;;
+        s) IFS=',' read -r -a SEEDS <<<"$OPTARG" ;;
+        h) usage 0 ;;
+        *) usage 1 ;;
     esac
 done
 
-# Validate required arguments
-if [ -z "$MODEL_ID" ] || [ -z "$DATASET_FILE" ]; then
-    echo "Error: -m and -d are required."
-    usage
+if [[ -z "$MODEL_ID" || -z "$DATASET_FILE" ]]; then
+    echo "ERROR: -m and -d are required."
+    usage 1
 fi
 
-# Update N based on actual seed count
-N=${#SEEDS[@]}
+require_file "$DATASET_FILE"
+SWIFT_BIN="$(require_modelscope_swift)"
 
-# ==================== Setup paths ====================
-mkdir -p "$OUTPUT_DIR"
-dataset_name=$(basename "$DATASET_FILE" .jsonl)
+ensure_dir "$OUTPUT_DIR"
+dataset_name="$(basename "$DATASET_FILE" .jsonl)"
+round_count="${#SEEDS[@]}"
 
 echo "=========================================="
-echo "Starting Best-of-$N Inference Task"
+echo "Starting Best-of-$round_count inference"
 echo "Model: $MODEL_ID"
 echo "Dataset: $DATASET_FILE"
+echo "CUDA_VISIBLE_DEVICES: $CUDA_VISIBLE_DEVICES"
 echo "Seeds: ${SEEDS[*]}"
 echo "Output Directory: $OUTPUT_DIR"
 echo "=========================================="
 
-# ==================== Run inference for each seed ====================
-for CURRENT_SEED in "${SEEDS[@]}"; do
-    result_file="$OUTPUT_DIR/${dataset_name}_seed${CURRENT_SEED}.jsonl"
-    log_file="$OUTPUT_DIR/${dataset_name}_seed${CURRENT_SEED}.log"
+for current_seed in "${SEEDS[@]}"; do
+    result_file="$OUTPUT_DIR/${dataset_name}_seed${current_seed}.jsonl"
+    log_file="$OUTPUT_DIR/${dataset_name}_seed${current_seed}.log"
 
-    echo ""
-    echo ">>> [Round Start] Running with SEED: $CURRENT_SEED"
+    echo
+    echo ">>> Running seed $current_seed"
     echo ">>> Saving results to: $result_file"
 
-    # Skip if result file already exists (avoid re-running)
-    if [ -f "$result_file" ]; then
-        echo "⚠️  Result file already exists, skipping this seed..."
+    if [[ -f "$result_file" ]]; then
+        echo "Result file already exists, skipping seed $current_seed."
         continue
     fi
 
-    timeout ${TIMEOUT_HOURS}h swift infer \
+    run_with_timeout_hours "$TIMEOUT_HOURS" "$SWIFT_BIN" infer \
         --model "$MODEL_ID" \
         --val_dataset "$DATASET_FILE" \
         --infer_backend "$BACKEND" \
         --temperature "$TEMPERATURE" \
         --repetition_penalty "$REPETITION_PENALTY" \
         --top_p "$TOP_P" \
-        --seed "$CURRENT_SEED" \
+        --seed "$current_seed" \
         --max_new_tokens "$MAX_NEW_TOKENS" \
         --result_path "$result_file" \
         >"$log_file" 2>&1
 
     exit_code=$?
 
-    if [ $exit_code -eq 0 ]; then
-        echo "✓ [Success] Seed $CURRENT_SEED completed successfully."
-    elif [ $exit_code -eq 124 ]; then
-        echo "⏰ [Timeout] Seed $CURRENT_SEED exceeded $TIMEOUT_HOURS hours."
+    if [[ $exit_code -eq 0 ]]; then
+        echo "Seed $current_seed completed successfully."
+    elif [[ $exit_code -eq 124 ]]; then
+        echo "Seed $current_seed exceeded $TIMEOUT_HOURS hours."
     else
-        echo "✗ [Failed] Seed $CURRENT_SEED failed (exit code: $exit_code). See log: $log_file"
+        echo "Seed $current_seed failed (exit code: $exit_code). See log: $log_file"
         echo "--------- Last 15 lines of log ---------"
         tail -n 15 "$log_file"
     fi
-
-    # Optional: Clear GPU cache between runs (uncomment if needed)
-    # python3 -c "import torch; torch.cuda.empty_cache()" 2>/dev/null
 done
 
-echo ""
+echo
 echo "=========================================="
-echo "🎉 All $N rounds completed!"
-echo "Results are ready for Best-of-N selection/filtering."
+echo "All $round_count rounds completed."
 echo "Output directory: $OUTPUT_DIR"
 echo "=========================================="

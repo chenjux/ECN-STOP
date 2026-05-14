@@ -49,11 +49,30 @@ Across DeepSeek-R1-Distill-Qwen-7B and DeepSeek-R1-Distill-LLaMA-3-8B on GSM8K, 
 │   └── inference.sh                   # Single-run inference / checking
 ├── train/
 │   ├── run.sh
-│   └── train.sh
+│   ├── train.sh
+│   ├── export_model.sh
+│   └── train_and_benchmark_all.sh
 ├── eval/
 │   ├── auto_eval.py
 │   └── report.py
+├── pipeline/
+│   ├── prepare_prompts.py
+│   ├── build_judge_prompts.py
+│   ├── select_good_traces.py
+│   ├── segment_traces.py
+│   ├── build_annotation_batches.py
+│   ├── collect_annotations.py
+│   ├── prune_ecn.py
+│   └── validate_artifacts.py
+├── scripts/
+│   ├── check.sh
+│   └── common.sh
+├── configs/
+│   └── default.env.example
+├── docs/
+│   └── pipeline.md
 ├── figures/
+├── requirements.txt
 └── README.md
 ```
 
@@ -64,7 +83,7 @@ Across DeepSeek-R1-Distill-Qwen-7B and DeepSeek-R1-Distill-LLaMA-3-8B on GSM8K, 
 ```bash
 conda create -n stop python=3.10 -y
 conda activate stop
-pip install modelscope "modelscope-swift[llm]" evalscope vllm transformers
+pip install -r requirements.txt
 ```
 
 2. Train with STOP / ECN-constructed data
@@ -74,11 +93,23 @@ pip install modelscope "modelscope-swift[llm]" evalscope vllm transformers
 ```
 
 The default training entry expects `./data/ecn_self_distill_qwen.jsonl`.
+You can override the main paths without editing the script:
+
+```bash
+MODEL="deepseek-ai/DeepSeek-R1-Distill-Qwen-7B" \
+DATASET_DIR="./data" \
+OUTPUT_BASE_DIR="./train/model" \
+./train/run.sh
+```
+
+For the full step-by-step workflow, see [`docs/pipeline.md`](./docs/pipeline.md).
 
 3. Evaluate the pruned model
 
 ```bash
-python ./eval/auto_eval.py
+python3 ./eval/auto_eval.py \
+  --model "./train/model/example/checkpoint-100-merged=stop_qwen" \
+  --datasets math_500
 ```
 
 ## Main Experimental Settings
@@ -100,7 +131,7 @@ Training epochs: 6
 Eval / save / logging steps: 100 / 100 / 5
 Save total limit: 2
 Dataloader workers: 4
-Default GPU: CUDA_VISIBLE_DEVICES=0
+Default GPU: CUDA_VISIBLE_DEVICES=0, overridable from the environment
 ```
 
 ## Evaluation
@@ -116,7 +147,25 @@ Math500, GSM8K, AIME 2024
 1. Use `prm12k_self_distill.ipynb` together with `best_of_N_inference.sh` and `inference.sh` to generate self-distilled traces and keep successful candidates.
 2. Use `google_batch_api.ipynb` and `prm12k_tree_pruning.ipynb` to build the STOP structured reasoning interface, identify the ECN for each trace, and prune each trace to its minimal correct prefix.
 3. Fine-tune the student model on the resulting ECN-pruned supervision targets with `./train/run.sh`.
-4. Run `python ./eval/auto_eval.py` for benchmark evaluation.
+4. Run `python3 ./eval/auto_eval.py` for benchmark evaluation.
+
+Useful script examples:
+
+```bash
+./pruned_data_pipeline/best_of_N_inference.sh \
+  -m "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B" \
+  -d "./data/self_distill_prompts.jsonl" \
+  -o "./best_of_n_results/qwen" \
+  -s 1,2,3,4
+
+python3 ./eval/report.py ./outputs --output-csv ./outputs/summary.csv
+```
+
+Run lightweight checks before committing:
+
+```bash
+./scripts/check.sh
+```
 
 ## Acknowledgement
 
