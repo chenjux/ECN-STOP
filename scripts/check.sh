@@ -6,7 +6,10 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 cd "$ROOT_DIR"
 
-python3 -m py_compile eval/auto_eval.py eval/report.py
+python3 -m py_compile \
+    eval/auto_eval.py \
+    eval/report.py \
+    pipeline/*.py
 
 bash -n \
     scripts/common.sh \
@@ -19,6 +22,14 @@ bash -n \
 
 python3 eval/auto_eval.py --help >/dev/null
 python3 eval/report.py --help >/dev/null
+python3 -m pipeline.prepare_prompts --help >/dev/null
+python3 -m pipeline.build_judge_prompts --help >/dev/null
+python3 -m pipeline.select_good_traces --help >/dev/null
+python3 -m pipeline.segment_traces --help >/dev/null
+python3 -m pipeline.build_annotation_batches --help >/dev/null
+python3 -m pipeline.collect_annotations --help >/dev/null
+python3 -m pipeline.prune_ecn --help >/dev/null
+python3 -m pipeline.validate_artifacts --help >/dev/null
 bash pruned_data_pipeline/inference.sh -h >/dev/null
 bash pruned_data_pipeline/best_of_N_inference.sh -h >/dev/null
 

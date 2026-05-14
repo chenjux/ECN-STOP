@@ -54,6 +54,15 @@ Across DeepSeek-R1-Distill-Qwen-7B and DeepSeek-R1-Distill-LLaMA-3-8B on GSM8K, 
 ├── eval/
 │   ├── auto_eval.py
 │   └── report.py
+├── pipeline/
+│   ├── prepare_prompts.py
+│   ├── build_judge_prompts.py
+│   ├── select_good_traces.py
+│   ├── segment_traces.py
+│   ├── build_annotation_batches.py
+│   ├── collect_annotations.py
+│   ├── prune_ecn.py
+│   └── validate_artifacts.py
 ├── scripts/
 │   ├── check.sh
 │   └── common.sh
