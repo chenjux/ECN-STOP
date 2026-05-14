@@ -50,7 +50,8 @@ Across DeepSeek-R1-Distill-Qwen-7B and DeepSeek-R1-Distill-LLaMA-3-8B on GSM8K, 
 ├── train/
 │   ├── run.sh
 │   ├── train.sh
-│   └── export_model.sh
+│   ├── export_model.sh
+│   └── train_and_benchmark_all.sh
 ├── eval/
 │   ├── auto_eval.py
 │   └── report.py

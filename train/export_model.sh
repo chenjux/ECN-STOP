@@ -11,7 +11,7 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 source "$ROOT_DIR/scripts/common.sh"
 
 CHECKPOINT_DIR="$1"
-OUTPUT_DIR="${2:-}"
+OUTPUT_DIR="${2:-${CHECKPOINT_DIR}-merged}"
 
 require_dir "$CHECKPOINT_DIR"
 SWIFT_BIN="$(require_modelscope_swift)"
@@ -20,12 +20,11 @@ cmd=(
     "$SWIFT_BIN" export
     --adapters "$CHECKPOINT_DIR"
     --merge_lora true
+    --output_dir "$OUTPUT_DIR"
 )
 
-if [[ -n "$OUTPUT_DIR" ]]; then
-    ensure_dir "$OUTPUT_DIR"
-    cmd+=(--output_dir "$OUTPUT_DIR")
-fi
+ensure_dir "$OUTPUT_DIR"
 
 echo "Exporting merged LoRA model from: $CHECKPOINT_DIR"
+echo "Merged model output dir: $OUTPUT_DIR"
 "${cmd[@]}"

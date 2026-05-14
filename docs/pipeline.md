@@ -167,6 +167,23 @@ MODEL="deepseek-ai/DeepSeek-R1-Distill-Qwen-7B" \
 
 `train/run.sh` finds the latest `checkpoint-*` under each training output and calls `train/export_model.sh` to merge the LoRA adapter.
 
+To train multiple base models and benchmark every exported model in one run:
+
+```bash
+MODEL_SPECS="deepseek-ai/DeepSeek-R1-Distill-Qwen-7B=qwen7b,deepseek-ai/DeepSeek-R1-Distill-Llama-8B=llama8b" \
+DATASETS="./data/ecn_self_distill_qwen.jsonl" \
+MAX_LENGTHS="8192" \
+SEEDS="1,2,3" \
+BENCHMARK_DATASETS="math_500,gsm8k,aime24" \
+./train/train_and_benchmark_all.sh
+```
+
+This script writes a benchmark manifest under `runs/train_benchmark_<timestamp>/benchmark_models.tsv`, then passes every exported `<checkpoint>-merged` directory to `eval/auto_eval.py`.
+
+`DATASETS` and `MAX_LENGTHS` are applied to every model in `MODEL_SPECS`. If different base models need different training files, run this script once per dataset group.
+
+Set `RUN_BENCHMARK=0` to only train/export and skip the benchmark phase.
+
 ## 10. Evaluate
 
 ```bash

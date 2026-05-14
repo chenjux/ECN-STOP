@@ -17,6 +17,7 @@ bash -n \
     train/run.sh \
     train/train.sh \
     train/export_model.sh \
+    train/train_and_benchmark_all.sh \
     pruned_data_pipeline/inference.sh \
     pruned_data_pipeline/best_of_N_inference.sh
 
@@ -32,5 +33,6 @@ python3 -m pipeline.prune_ecn --help >/dev/null
 python3 -m pipeline.validate_artifacts --help >/dev/null
 bash pruned_data_pipeline/inference.sh -h >/dev/null
 bash pruned_data_pipeline/best_of_N_inference.sh -h >/dev/null
+bash train/train_and_benchmark_all.sh -h >/dev/null
 
 echo "Static checks passed."

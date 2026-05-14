@@ -13,6 +13,7 @@ EXPORT_SCRIPT="${EXPORT_SCRIPT:-$SCRIPT_DIR/export_model.sh}"
 DATASET_LIST_CSV="${DATASETS:-$DATASET_DIR/ecn_self_distill_qwen.jsonl}"
 MAX_LENGTH_LIST_CSV="${MAX_LENGTHS:-8192}"
 SEED_LIST_CSV="${SEEDS:-1}"
+MANIFEST_FILE="${MANIFEST_FILE:-}"
 
 ensure_dir "$LOG_DIR"
 ensure_dir "$OUTPUT_BASE_DIR"
@@ -51,6 +52,7 @@ run_task() {
     local task_name="$4"
 
     local timestamp output_dir task_log checkpoint
+    local merged_dir
     timestamp="$(date +%Y_%m%d_%H%M%S)"
     output_dir="$OUTPUT_BASE_DIR/${task_name}_$timestamp"
     task_log="$LOG_DIR/${task_name}_$timestamp.log"
@@ -75,9 +77,14 @@ run_task() {
     fi
 
     if [[ -f "$EXPORT_SCRIPT" ]]; then
-        if ! bash "$EXPORT_SCRIPT" "$checkpoint" >>"$task_log" 2>&1; then
+        merged_dir="${checkpoint}-merged"
+        if ! bash "$EXPORT_SCRIPT" "$checkpoint" "$merged_dir" >>"$task_log" 2>&1; then
             log "ERROR: Export failed for $task_name" "$task_log"
             exit 1
+        fi
+        if [[ -n "$MANIFEST_FILE" ]]; then
+            ensure_dir "$(dirname "$MANIFEST_FILE")"
+            printf '%s\t%s\n' "$merged_dir" "$task_name" >>"$MANIFEST_FILE"
         fi
     else
         log "WARNING: Export script not found, skipping export: $EXPORT_SCRIPT" "$task_log"
@@ -94,7 +101,7 @@ if [[ "${#DATASET_LIST[@]}" -ne "${#MAX_LENGTH_LIST[@]}" ]]; then
     die "DATASETS and MAX_LENGTHS must have the same number of comma-separated items."
 fi
 
-MODEL_LABEL="$(safe_name "$(basename "$MODEL")")"
+MODEL_LABEL="${MODEL_LABEL:-$(safe_name "$(basename "$MODEL")")}"
 
 log "Starting pipeline: $(date)"
 
