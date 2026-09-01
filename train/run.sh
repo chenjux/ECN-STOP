@@ -1,9 +1,12 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-MODEL="deepseek-ai/DeepSeek-R1-Distill-Qwen-7B" #change base model here
-DATASET_DIR="./data" #change data dir here
-OUTPUT_BASE_DIR="./train/model"
-LOG_DIR="./train/log"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+MODEL="${MODEL:-deepseek-ai/DeepSeek-R1-Distill-Qwen-7B}" # change base model here
+DATASET_DIR="${DATASET_DIR:-$ROOT_DIR/data}" # change data dir here
+OUTPUT_BASE_DIR="${OUTPUT_BASE_DIR:-$SCRIPT_DIR/model}"
+LOG_DIR="${LOG_DIR:-$SCRIPT_DIR/log}"
 mkdir -p "$LOG_DIR"
 
 # main log
@@ -26,7 +29,7 @@ run_task() {
     echo "Starting $TASK_NAME (seed $SEED) at $(date)" | tee -a "$PIPELINE_LOG" "$TASK_LOG"
 
     # 训练（前台执行，阻塞）
-    bash ./train.sh "$DATASET" "$MODEL" "$OUTPUT_DIR" "$SEED" "$MAX_LENGTH" \
+    bash "$SCRIPT_DIR/train.sh" "$DATASET" "$MODEL" "$OUTPUT_DIR" "$SEED" "$MAX_LENGTH" \
         >> "$TASK_LOG" 2>&1
 
     if [ $? -ne 0 ]; then
@@ -44,7 +47,7 @@ run_task() {
     fi
 
     # 导出（前台执行，阻塞）
-    bash ./export_model.sh "$CHECKPOINT" >> "$TASK_LOG" 2>&1
+    bash "$SCRIPT_DIR/export_model.sh" "$CHECKPOINT" >> "$TASK_LOG" 2>&1
 
     if [ $? -ne 0 ]; then
         echo "ERROR: Export failed for $TASK_NAME" | tee -a "$PIPELINE_LOG" "$TASK_LOG"
@@ -66,12 +69,14 @@ SEEDS=("1")   # can add multiple seeds like ("1" "2" "3")
 
 
 
-for i in ${!DATASETS[@]}; do
-    for seed in ${SEEDS[@]}; do
+MODEL_NAME="$(basename "$MODEL")"
+
+for i in "${!DATASETS[@]}"; do
+    for seed in "${SEEDS[@]}"; do
         DATASET="${DATASETS[i]}"
         MAX_LENGTH="${MAX_LENGTHS[i]}"
         DATASET_NAME=$(basename "$DATASET" .jsonl)
-        TASK_NAME="${DATASET_NAME}_${MAX_LENGTH}_${seed}_${MODEL}"
+        TASK_NAME="${DATASET_NAME}_${MAX_LENGTH}_${seed}_${MODEL_NAME}"
         run_task "$seed" "$MAX_LENGTH" "$DATASET" "$TASK_NAME"
     done
 done

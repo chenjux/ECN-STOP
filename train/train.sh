@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Check if required arguments are provided
 if [ $# -ne 5 ]; then
@@ -13,8 +13,12 @@ OUTPUT_DIR="$3"
 SEED="$4"
 MAX_LENGTH="$5"
 
-LOGFILE="./train/log/training_log_$(date +%Y%m%d_%H%M%S).log"
-PIDFILE="training_${OUTPUT_DIR//\//_}.pid"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LOG_DIR="${LOG_DIR:-$SCRIPT_DIR/log}"
+mkdir -p "$LOG_DIR" "$OUTPUT_DIR"
+
+LOGFILE="$LOG_DIR/training_log_$(date +%Y%m%d_%H%M%S).log"
+PIDFILE="$LOG_DIR/training_$(basename "$OUTPUT_DIR")_$$.pid"
 
 # Log basic information
 echo "Starting training: $(date)"
@@ -66,14 +70,14 @@ CUDA_VISIBLE_DEVICES=0 swift sft \
 
 # Save the PID
 TRAIN_PID=$!
-echo $TRAIN_PID > "$PIDFILE"
+echo "$TRAIN_PID" > "$PIDFILE"
 
 echo "Training started in background with PID: $TRAIN_PID"
 echo "Log file: $LOGFILE"
 echo "Waiting for training to complete..."
 
 # Wait for the process to finish
-wait $TRAIN_PID
+wait "$TRAIN_PID"
 TRAIN_EXIT_CODE=$?
 
 # Clean up PID file
